@@ -1,0 +1,31 @@
+{
+  "envelope": {
+    "source": "+490000000000",
+    "sourceNumber": "+490000000000",
+    "sourceUuid": "00000000-0000-4000-8000-000000000001",
+    "sourceName": "Tester",
+    "sourceDevice": 5,
+    "timestamp": 1786854682790,
+    "serverReceivedTimestamp": 1786854682850,
+    "serverDeliveredTimestamp": 1786854682900,
+    "dataMessage": {
+      "timestamp": 1786854682790,
+      "message": null,
+      "expiresInSeconds": 0,
+      "isExpirationUpdate": false,
+      "viewOnce": false,
+      "pollCreate": {
+        "question": "example poll",
+        "allowMultiple": false,
+        "options": ["yes", "no"]
+      },
+      "groupInfo": {
+        "groupId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "groupName": "h-cloud admin",
+        "revision": 0,
+        "type": "DELIVER"
+      }
+    }
+  },
+  "account": "+490000000001"
+}

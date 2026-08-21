@@ -1,0 +1,26 @@
+{
+  "envelope": {
+    "source": "+490000000000",
+    "sourceNumber": "+490000000000",
+    "sourceUuid": "00000000-0000-4000-8000-000000000001",
+    "sourceName": "Tester",
+    "sourceDevice": 5,
+    "timestamp": 1786852620009,
+    "serverReceivedTimestamp": 1786852620100,
+    "serverDeliveredTimestamp": 1786852620150,
+    "dataMessage": {
+      "timestamp": 1786852620009,
+      "message": "hello claude",
+      "expiresInSeconds": 0,
+      "isExpirationUpdate": false,
+      "viewOnce": false,
+      "groupInfo": {
+        "groupId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "groupName": "h-cloud admin",
+        "revision": 0,
+        "type": "DELIVER"
+      }
+    }
+  },
+  "account": "+490000000001"
+}

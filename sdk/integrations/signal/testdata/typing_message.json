@@ -1,0 +1,18 @@
+{
+  "envelope": {
+    "source": "+490000000000",
+    "sourceNumber": "+490000000000",
+    "sourceUuid": "00000000-0000-4000-8000-000000000001",
+    "sourceName": "Tester",
+    "sourceDevice": 5,
+    "timestamp": 1786730357829,
+    "serverReceivedTimestamp": 1786730357908,
+    "serverDeliveredTimestamp": 1786730357930,
+    "typingMessage": {
+      "action": "STARTED",
+      "timestamp": 1786730357829,
+      "groupId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    }
+  },
+  "account": "+490000000001"
+}

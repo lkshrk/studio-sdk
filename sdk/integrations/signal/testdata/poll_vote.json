@@ -1,0 +1,36 @@
+{
+  "envelope": {
+    "source": "+490000000000",
+    "sourceNumber": "+490000000000",
+    "sourceUuid": "00000000-0000-4000-8000-000000000001",
+    "sourceName": "Tester",
+    "sourceDevice": 5,
+    "timestamp": 1786854659376,
+    "serverReceivedTimestamp": 1786854659445,
+    "serverDeliveredTimestamp": 1786854659453,
+    "dataMessage": {
+      "timestamp": 1786854659376,
+      "message": null,
+      "expiresInSeconds": 0,
+      "isExpirationUpdate": false,
+      "viewOnce": false,
+      "pollVote": {
+        "author": "+490000000001",
+        "authorNumber": "+490000000001",
+        "authorUuid": "00000000-0000-4000-8000-0000000000bb",
+        "targetSentTimestamp": 1786854621623,
+        "optionIndexes": [
+          1
+        ],
+        "voteCount": 1
+      },
+      "groupInfo": {
+        "groupId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "groupName": "h-cloud admin",
+        "revision": 0,
+        "type": "DELIVER"
+      }
+    }
+  },
+  "account": "+490000000001"
+}

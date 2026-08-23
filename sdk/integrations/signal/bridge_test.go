@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	fixtureGroupID = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-	fixtureVoterID = "00000000-0000-4000-8000-000000000001"
+	fixtureGroupID  = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	fixtureVoterID  = "00000000-0000-4000-8000-000000000001"
+	fixtureSelfUUID = "00000000-0000-4000-8000-00000000aaaa"
 )
 
 type recordingHandler struct {
@@ -313,6 +314,98 @@ func TestEmptyApproversAdmitsAnyGroupMember(t *testing.T) {
 	}
 	if len(*calls) != 1 {
 		t.Errorf("calls = %+v, want only the poll create (no refusal)", *calls)
+	}
+}
+
+func TestVoteOnPollPilotDidNotAuthorIsIgnored(t *testing.T) {
+	srv, calls := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, h := newTestBridge(t, srv.URL)
+	b.selfUUID = fixtureSelfUUID
+	openApprovalPoll(t, b)
+
+	vote := loadEnvelope(t, "poll_vote.json")
+	vote.DataMessage.PollVote.PollAuthorUUID = "00000000-0000-4000-8000-0000000000bb"
+	b.processFrame(context.Background(), vote)
+
+	if got := len(h.all()); got != 0 {
+		t.Errorf("got %d events, want 0 (poll was authored by someone else)", got)
+	}
+	if len(*calls) != 1 {
+		t.Errorf("calls = %+v, want only the poll create", *calls)
+	}
+}
+
+func TestOwnVoteIsIgnored(t *testing.T) {
+	srv, _ := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, h := newTestBridge(t, srv.URL)
+	b.selfUUID = fixtureSelfUUID
+	openApprovalPoll(t, b)
+
+	vote := loadEnvelope(t, "poll_vote.json")
+	vote.DataMessage.PollVote.PollAuthorUUID = fixtureSelfUUID
+	vote.SourceUUID = fixtureSelfUUID
+	b.processFrame(context.Background(), vote)
+
+	if got := len(h.all()); got != 0 {
+		t.Errorf("got %d events, want 0 (pilot's own vote)", got)
+	}
+}
+
+func TestFirstVoteWithZeroRevisionEmits(t *testing.T) {
+	srv, _ := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, h := newTestBridge(t, srv.URL)
+	openApprovalPoll(t, b)
+
+	vote := loadEnvelope(t, "poll_vote.json")
+	vote.DataMessage.PollVote.VoteCount = 0
+	b.processFrame(context.Background(), vote)
+
+	if got := len(h.all()); got != 1 {
+		t.Fatalf("got %d events, want 1 (revision 0 is a first vote, not a replay)", got)
+	}
+}
+
+func TestAckForgetsPerVoterPollState(t *testing.T) {
+	srv, _ := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, _ := newTestBridgeWithApprovers(t, srv.URL, "00000000-0000-4000-8000-00000000ffff")
+	openApprovalPoll(t, b)
+
+	b.processFrame(context.Background(), loadEnvelope(t, "poll_vote.json"))
+	if len(b.seenVoteRevision) != 1 || len(b.refusedVotes) != 1 {
+		t.Fatalf("revisions = %v, refusals = %v, want one entry each", b.seenVoteRevision, b.refusedVotes)
+	}
+
+	if err := b.Ack(context.Background(), formatCallbackID(GroupRecipient(fixtureGroupID), 1786854621623)); err != nil {
+		t.Fatalf("Ack: %v", err)
+	}
+	if len(b.polls) != 0 || len(b.seenVoteRevision) != 0 || len(b.refusedVotes) != 0 {
+		t.Errorf("state after Ack: polls=%v revisions=%v refusals=%v, want all empty",
+			b.polls, b.seenVoteRevision, b.refusedVotes)
+	}
+}
+
+func TestNonApproverIsRefusedOnlyOnce(t *testing.T) {
+	srv, calls := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, h := newTestBridgeWithApprovers(t, srv.URL, "00000000-0000-4000-8000-00000000ffff")
+	openApprovalPoll(t, b)
+
+	b.processFrame(context.Background(), loadEnvelope(t, "poll_vote.json"))
+	changed := loadEnvelope(t, "poll_vote.json")
+	changed.DataMessage.PollVote.VoteCount = 2
+	changed.DataMessage.PollVote.OptionIndexes = []int{0}
+	b.processFrame(context.Background(), changed)
+
+	if got := len(h.all()); got != 0 {
+		t.Errorf("got %d events, want 0 (voter is not an approver)", got)
+	}
+	sends := 0
+	for _, c := range *calls {
+		if c.path == "/v2/send" {
+			sends++
+		}
+	}
+	if sends != 1 {
+		t.Errorf("got %d refusal messages, want 1 (later revisions drop silently)", sends)
 	}
 }
 

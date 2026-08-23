@@ -41,6 +41,9 @@ type bridge struct {
 	// lets an open poll's answer be changed and redelivers frames; without the
 	// revision guard a stale redelivery could overturn a later decision.
 	seenVoteRevision map[string]int
+	// refusedVotes remembers which (voter, poll) pairs were already told they may
+	// not approve, so repeated revisions cannot be turned into a message flood.
+	refusedVotes map[string]struct{}
 }
 
 // pollMeta binds a poll pilot posted to the button payloads its options carry.
@@ -115,10 +118,27 @@ func (b *bridge) Ack(ctx context.Context, callbackID string) error {
 	if err := b.sender.ClosePoll(ctx, recipient, ts); err != nil {
 		return err
 	}
-	b.mu.Lock()
-	delete(b.polls, ts)
-	b.mu.Unlock()
+	b.forgetPoll(ts)
 	return nil
+}
+
+// forgetPoll drops the poll and every per-voter entry keyed to it; without the
+// per-voter sweep those maps grow for the lifetime of the process.
+func (b *bridge) forgetPoll(ts int64) {
+	suffix := "|" + strconv.FormatInt(ts, 10)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.polls, ts)
+	for k := range b.seenVoteRevision {
+		if strings.HasSuffix(k, suffix) {
+			delete(b.seenVoteRevision, k)
+		}
+	}
+	for k := range b.refusedVotes {
+		if strings.HasSuffix(k, suffix) {
+			delete(b.refusedVotes, k)
+		}
+	}
 }
 
 func (b *bridge) processFrame(ctx context.Context, e Envelope) {
@@ -169,10 +189,25 @@ func (b *bridge) processFrame(ctx context.Context, e Envelope) {
 }
 
 func (b *bridge) handleVote(ctx context.Context, vote Vote) {
+	if b.selfUUID != "" {
+		if vote.PollAuthorID != b.selfUUID {
+			b.logger.Debug("signal: vote on a poll pilot did not author ignored",
+				slog.Int64("poll", vote.PollTimestamp),
+				slog.String("author", vote.PollAuthorID))
+			return
+		}
+		if vote.VoterID == b.selfUUID {
+			b.logger.Debug("signal: own vote ignored", slog.Int64("poll", vote.PollTimestamp))
+			return
+		}
+	}
+
+	revKey := voteKey(vote.VoterID, vote.PollTimestamp)
 	b.mu.Lock()
 	meta, known := b.polls[vote.PollTimestamp]
-	revKey := vote.VoterID + "|" + strconv.FormatInt(vote.PollTimestamp, 10)
-	stale := known && b.seenVoteRevision[revKey] >= vote.Revision
+	// Presence, not the zero value: a first vote carries revision 0.
+	seen, replayed := b.seenVoteRevision[revKey]
+	stale := known && replayed && seen >= vote.Revision
 	if known && !stale {
 		b.seenVoteRevision[revKey] = vote.Revision
 	}
@@ -190,6 +225,18 @@ func (b *bridge) handleVote(ctx context.Context, vote Vote) {
 		b.logger.Warn("signal: vote from non-approver ignored",
 			slog.Int64("poll", vote.PollTimestamp),
 			slog.String("voter", vote.VoterID))
+		b.mu.Lock()
+		_, told := b.refusedVotes[revKey]
+		if !told {
+			if b.refusedVotes == nil {
+				b.refusedVotes = make(map[string]struct{})
+			}
+			b.refusedVotes[revKey] = struct{}{}
+		}
+		b.mu.Unlock()
+		if told {
+			return
+		}
 		// The poll stays open so an approver can still decide it.
 		if _, err := b.sender.SendText(ctx, meta.recipient, refusedVoteText); err != nil {
 			b.logger.Warn("signal: reporting refused vote failed", slog.Any("error", err))
@@ -223,6 +270,10 @@ func (b *bridge) mayApprove(voter string) bool {
 		}
 	}
 	return false
+}
+
+func voteKey(voterID string, pollTS int64) string {
+	return voterID + "|" + strconv.FormatInt(pollTS, 10)
 }
 
 // formatCallbackID encodes everything Ack needs to close the poll, so

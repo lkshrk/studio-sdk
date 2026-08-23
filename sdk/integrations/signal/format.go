@@ -3,6 +3,7 @@ package signal
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Signal has no markdown renderer. With text_mode "styled" it understands
@@ -19,7 +20,6 @@ var (
 	mdQuote      = regexp.MustCompile(`^\s*>\s?`)
 	mdBoldStars  = regexp.MustCompile(`\*\*([^*]+)\*\*`)
 	mdBoldUnder  = regexp.MustCompile(`__([^_]+)__`)
-	mdEmStars    = regexp.MustCompile(`\*([^*\s][^*]*)\*`)
 	mdInlineCode = regexp.MustCompile("`([^`]*)`")
 	mdImage      = regexp.MustCompile(`!\[([^\]]*)\]\(([^)\s]+)[^)]*\)`)
 	mdLink       = regexp.MustCompile(`\[([^\]]+)\]\(([^)\s]+)[^)]*\)`)
@@ -40,6 +40,62 @@ const (
 	phItalic = "\x02"
 )
 
+// isWordRune reports whether r would make a marker word-internal rather than
+// a flanking emphasis marker.
+func isWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func emphasisCanOpen(runes []rune, i int) bool {
+	if i+1 >= len(runes) || unicode.IsSpace(runes[i+1]) || runes[i+1] == runes[i] {
+		return false
+	}
+	if i == 0 {
+		return true
+	}
+	prev := runes[i-1]
+	return unicode.IsSpace(prev) || strings.ContainsRune("([{<\"'", prev)
+}
+
+// replaceEmphasis rewrites single-marker emphasis spans, wrapping their content
+// in prefix and suffix. A marker only pairs when it flanks the span the way
+// CommonMark requires, so word-internal markers (2*3, build/*.go, snake_case)
+// stay literal for the caller to escape or keep.
+func replaceEmphasis(s string, marker rune, prefix, suffix string) string {
+	if !strings.ContainsRune(s, marker) {
+		return s
+	}
+	runes := []rune(s)
+	var b strings.Builder
+	for i := 0; i < len(runes); {
+		if runes[i] != marker || !emphasisCanOpen(runes, i) {
+			b.WriteRune(runes[i])
+			i++
+			continue
+		}
+		end := -1
+		for k := i + 2; k < len(runes); k++ {
+			if runes[k] != marker {
+				continue
+			}
+			if !unicode.IsSpace(runes[k-1]) && (k+1 == len(runes) || !isWordRune(runes[k+1])) {
+				end = k
+			}
+			break
+		}
+		if end < 0 {
+			b.WriteRune(runes[i])
+			i++
+			continue
+		}
+		b.WriteString(prefix)
+		b.WriteString(string(runes[i+1 : end]))
+		b.WriteString(suffix)
+		i = end + 1
+	}
+	return b.String()
+}
+
 // styledInline converts one line of markdown into Signal styled syntax. Inline
 // code spans keep their backticks — Signal renders them monospace — but their
 // content is escaped.
@@ -53,7 +109,7 @@ func styledInline(line string) string {
 		part = mdStrike.ReplaceAllString(part, phStrike+"$1"+phStrike)
 		part = mdBoldUnder.ReplaceAllString(part, phBold+"$1"+phBold+phBold)
 		part = mdBoldStars.ReplaceAllString(part, phBold+"$1"+phBold+phBold)
-		part = mdEmStars.ReplaceAllString(part, phItalic+"$1"+phItalic)
+		part = replaceEmphasis(part, '*', phItalic, phItalic)
 		// Anything still carrying a style character is unpaired; the parser
 		// would silently swallow it, so escape rather than lose it.
 		part = escapeStyleChars(part)
@@ -83,7 +139,9 @@ func styledText(s string) string {
 	for _, line := range strings.Split(s, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			if inFence {
-				out = append(out, "`"+strings.Join(fence, "\n")+"`")
+				if len(fence) > 0 {
+					out = append(out, "`"+strings.Join(fence, "\n")+"`")
+				}
 				fence = nil
 			}
 			inFence = !inFence
@@ -137,7 +195,8 @@ func plainText(s string) string {
 		line = mdLink.ReplaceAllString(line, "$1 ($2)")
 		line = mdBoldStars.ReplaceAllString(line, "$1")
 		line = mdBoldUnder.ReplaceAllString(line, "$1")
-		line = mdEmStars.ReplaceAllString(line, "$1")
+		line = replaceEmphasis(line, '*', "", "")
+		line = replaceEmphasis(line, '_', "", "")
 		line = mdInlineCode.ReplaceAllString(line, "$1")
 		out = append(out, line)
 	}

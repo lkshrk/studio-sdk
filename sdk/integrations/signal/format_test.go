@@ -43,6 +43,21 @@ func TestStyledText(t *testing.T) {
 			in:   "## Result\nThe `average()` helper is **done**:\n* [PR #8](https://github.com/x/y/pull/8)",
 			want: "**Result**\nThe `average()` helper is **done**:\n• PR #8 (https://github.com/x/y/pull/8)",
 		},
+		{name: "word-internal asterisks escaped", in: "2*3 and 4*5", want: `2\*3 and 4\*5`},
+		{name: "glob pattern asterisks escaped", in: "build/*.go and src/*.ts", want: `build/\*.go and src/\*.ts`},
+		{name: "equation asterisks escaped", in: "a*b and c*d", want: `a\*b and c\*d`},
+		{name: "italic at line edges kept", in: "*italic*", want: "*italic*"},
+		{name: "italic mid sentence kept", in: "say *hi* now", want: "say *hi* now"},
+		{
+			name: "empty fence renders nothing",
+			in:   "before\n```\n```\nafter",
+			want: "before\nafter",
+		},
+		{
+			name: "non-empty fence still wraps",
+			in:   "before\n```\ncode\n```\nafter",
+			want: "before\n`code`\nafter",
+		},
 	}
 
 	for _, tt := range tests {
@@ -82,6 +97,14 @@ func TestPlainText(t *testing.T) {
 			name: "mixed answer",
 			in:   "## Result\nThe `average()` helper is **done**:\n* tests pass\n* [PR #8](https://github.com/x/y/pull/8)",
 			want: "Result\nThe average() helper is done:\n• tests pass\n• PR #8 (https://github.com/x/y/pull/8)",
+		},
+		{name: "underscore emphasis stripped", in: "see _project_ now", want: "see project now"},
+		{name: "snake_case underscores preserved", in: "set max_retries_count and _config_value", want: "set max_retries_count and _config_value"},
+		{name: "word-internal asterisks kept", in: "2*3 and build/*.go", want: "2*3 and build/*.go"},
+		{
+			name: "empty fence renders nothing",
+			in:   "before\n```\n```\nafter",
+			want: "before\nafter",
 		},
 	}
 

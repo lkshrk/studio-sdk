@@ -158,7 +158,8 @@ type SenderOption func(*Sender)
 
 // WithStyledText sends messages with text_mode "styled", so Signal renders
 // *italic*, **bold**, `monospace`, ~strikethrough~ and ||spoiler|| markers as
-// text styles instead of literal characters.
+// text styles instead of literal characters. Outbound text is translated from
+// markdown into that syntax first; without this option it is sent verbatim.
 func WithStyledText() SenderOption { return func(s *Sender) { s.styled = true } }
 
 // WithHTTPClient overrides the default client, which carries a 30s timeout.
@@ -207,9 +208,23 @@ func NewSender(baseURL, account string, opts ...SenderOption) (*Sender, error) {
 // MaxMessageLength is the threshold beyond which [Sender.SendChunked] splits.
 func (s *Sender) MaxMessageLength() int { return s.maxMsgLen }
 
+// render translates markdown into Signal's styled-text syntax, and is the one
+// place outbound text is rewritten: the public send methods call it exactly
+// once, so no text is translated twice or escaped twice.
+func (s *Sender) render(text string) string {
+	if !s.styled {
+		return text
+	}
+	return styledText(text)
+}
+
 // SendText delivers one message and returns its timestamp, which is the handle
 // used to react to or quote it later.
 func (s *Sender) SendText(ctx context.Context, recipient, text string) (int64, error) {
+	return s.send(ctx, recipient, s.render(text))
+}
+
+func (s *Sender) send(ctx context.Context, recipient, text string) (int64, error) {
 	if recipient == "" {
 		return 0, errors.New("signalcli: recipient is required")
 	}
@@ -246,7 +261,8 @@ func (s *Sender) SendText(ctx context.Context, recipient, text string) (int64, e
 // succeeded. Splitting prefers line boundaries, since agent output is mostly
 // logs and diffs where a mid-line break destroys readability.
 func (s *Sender) SendChunked(ctx context.Context, recipient, text string) ([]int64, error) {
-	chunks := splitMessage(text, s.maxMsgLen)
+	// Split the rendered text, so escaping cannot push a chunk past the limit.
+	chunks := splitMessage(s.render(text), s.maxMsgLen)
 	if len(chunks) > maxChunks {
 		return nil, fmt.Errorf("signalcli: %d chunks exceeds the %d limit; "+
 			"truncate or link the output instead of flooding the group",
@@ -254,7 +270,7 @@ func (s *Sender) SendChunked(ctx context.Context, recipient, text string) ([]int
 	}
 	stamps := make([]int64, 0, len(chunks))
 	for i, chunk := range chunks {
-		ts, err := s.SendText(ctx, recipient, chunk)
+		ts, err := s.send(ctx, recipient, chunk)
 		if err != nil {
 			return stamps, fmt.Errorf("signalcli: chunk %d of %d: %w", i+1, len(chunks), err)
 		}

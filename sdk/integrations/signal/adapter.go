@@ -49,7 +49,8 @@ type Config struct {
 	// Optional; without it self-filtering is skipped.
 	SelfUUID string
 	// StyledText sends messages with text_mode "styled", rendering *italic*,
-	// **bold**, `monospace`, ~strikethrough~ and ||spoiler|| markers as styles.
+	// **bold**, `monospace`, ~strikethrough~ and ||spoiler|| markers as styles,
+	// and translates outbound markdown into that syntax. Off, text is verbatim.
 	StyledText bool
 	// MaxMessageLength overrides the chunking threshold; zero uses the default.
 	MaxMessageLength int

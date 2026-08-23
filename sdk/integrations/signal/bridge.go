@@ -67,7 +67,7 @@ func (b *bridge) Send(ctx context.Context, m core.OutboundMessage) (core.Message
 	recipient := GroupRecipient(m.ChannelID)
 
 	if len(m.Buttons) > 0 {
-		question := truncateRunes(oneLine(m.Text), pollQuestionMax)
+		question := truncateRunes(oneLine(plainText(m.Text)), pollQuestionMax)
 		options := make([]string, 0, len(m.Buttons))
 		data := make([]string, 0, len(m.Buttons))
 		actionIDs := make([]string, 0, len(m.Buttons))

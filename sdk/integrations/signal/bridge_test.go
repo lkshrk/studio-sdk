@@ -212,6 +212,24 @@ func TestSendWithButtonsCreatesPollAndVoteBecomesCallback(t *testing.T) {
 	}
 }
 
+func TestPollQuestionStripsMarkdown(t *testing.T) {
+	srv, calls := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, _ := newTestBridge(t, srv.URL)
+
+	if _, err := b.Send(context.Background(), core.OutboundMessage{
+		ChannelID: fixtureGroupID,
+		Text:      "Approve **TASK-7**? it rewrites `api.go`",
+		Buttons:   []core.Button{{Label: "Approve", Data: "a"}, {Label: "Reject", Data: "r"}},
+	}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	want := "Approve TASK-7? it rewrites api.go"
+	if got := (*calls)[0].body["question"]; got != want {
+		t.Errorf("question = %v, want %q (polls render no styles)", got, want)
+	}
+}
+
 func TestStaleVoteRevisionIsIgnored(t *testing.T) {
 	srv, _ := apiServer(t, `{"timestamp":"1786854621623"}`)
 	b, h := newTestBridge(t, srv.URL)

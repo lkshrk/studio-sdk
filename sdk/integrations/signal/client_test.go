@@ -532,3 +532,49 @@ func TestSendTextPlainModeOmitsTextMode(t *testing.T) {
 		t.Errorf("text_mode set on plain send: %+v", (*got)[0].body)
 	}
 }
+
+func TestStyledSendTranslatesMarkdown(t *testing.T) {
+	t.Parallel()
+
+	srv, got := apiServer(t, http.StatusCreated, `{"timestamp":"1786852271208"}`)
+	in := "## Done\nran `a*b` for 5 * 3"
+	if _, err := newSender(t, srv, signal.WithStyledText()).SendText(t.Context(), "group.abc", in); err != nil {
+		t.Fatalf("SendText: %v", err)
+	}
+	want := "**Done**\nran `a\\*b` for 5 \\* 3"
+	if (*got)[0].body["message"] != want {
+		t.Errorf("message = %q, want %q", (*got)[0].body["message"], want)
+	}
+}
+
+func TestPlainSendKeepsTextVerbatim(t *testing.T) {
+	t.Parallel()
+
+	srv, got := apiServer(t, http.StatusCreated, `{"timestamp":"1786852271208"}`)
+	in := "## Done\nran `a*b` for 5 * 3"
+	if _, err := newSender(t, srv).SendText(t.Context(), "group.abc", in); err != nil {
+		t.Fatalf("SendText: %v", err)
+	}
+	if (*got)[0].body["message"] != in {
+		t.Errorf("message = %q, want it unchanged", (*got)[0].body["message"])
+	}
+}
+
+func TestSendChunkedTranslatesExactlyOnce(t *testing.T) {
+	t.Parallel()
+
+	srv, got := apiServer(t, http.StatusCreated, `{"timestamp":"1786852271208"}`)
+	s := newSender(t, srv, signal.WithStyledText(), signal.WithMaxMessageLength(12))
+	if _, err := s.SendChunked(t.Context(), "group.abc", "a * b\nc * d"); err != nil {
+		t.Fatalf("SendChunked: %v", err)
+	}
+	if len(*got) != 2 {
+		t.Fatalf("got %d sends, want 2 chunks of the rendered text", len(*got))
+	}
+	for i, want := range []string{"a \\* b\n", "c \\* d"} {
+		if (*got)[i].body["message"] != want {
+			t.Errorf("chunk %d = %q, want %q (double-escaped means translated twice)",
+				i, (*got)[i].body["message"], want)
+		}
+	}
+}

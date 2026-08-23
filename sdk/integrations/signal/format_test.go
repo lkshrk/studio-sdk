@@ -13,7 +13,7 @@ func TestStyledText(t *testing.T) {
 		{name: "bold kept", in: "the **build** passed", want: "the **build** passed"},
 		{name: "underscore bold becomes stars", in: "__urgent__ fix", want: "**urgent** fix"},
 		{name: "italic kept", in: "a *subtle* hint", want: "a *subtle* hint"},
-		{name: "single underscores left alone", in: "set max_retries_count in _config_", want: "set max_retries_count in _config_"},
+		{name: "snake_case kept, underscore emphasis converted", in: "set max_retries_count in _config_", want: "set max_retries_count in *config*"},
 		{name: "inline code kept, content escaped", in: "run `make build && a*b` now", want: "run `make build && a\\*b` now"},
 		{name: "header becomes bold", in: "## Summary\ntext", want: "**Summary**\ntext"},
 		{name: "double strike narrows", in: "~~gone~~ stays", want: "~gone~ stays"},
@@ -73,6 +73,18 @@ func TestStyledText(t *testing.T) {
 			in:   "before\n```\ncode\n```\nafter",
 			want: "before\n`code`\nafter",
 		},
+		{name: "asterisks after a colon escaped", in: "Note:*important*", want: `Note:\*important\*`},
+		{name: "underscore emphasis becomes stars", in: "_config_ and *star*", want: "*config* and *star*"},
+		{
+			name: "fence keeps interior blank lines",
+			in:   "before\n```\ncode\n\nmore\n```\nafter",
+			want: "before\n`code\n\nmore`\nafter",
+		},
+		{
+			name: "fence keeps indentation",
+			in:   "```\n    indented\n```",
+			want: "`    indented`",
+		},
 	}
 
 	for _, tt := range tests {
@@ -119,6 +131,11 @@ func TestPlainText(t *testing.T) {
 		{
 			name: "empty fence renders nothing",
 			in:   "before\n```\n```\nafter",
+			want: "before\nafter",
+		},
+		{
+			name: "whitespace-only fence renders nothing",
+			in:   "before\n```\n   \n```\nafter",
 			want: "before\nafter",
 		},
 	}

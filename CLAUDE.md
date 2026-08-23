@@ -3,9 +3,9 @@
 ## Context
 
 Reusable Go connectors for issue trackers (GitHub, GitLab, Azure DevOps, Linear,
-Jira, Asana, Plane) and chat platforms (Slack, Telegram, Discord). Each connector
-normalizes a third-party API into the small contract surface in `sdk/core`, so a
-host service can consume any of them the same way.
+Jira, Asana, Plane) and chat platforms (Slack, Telegram, Discord, Signal). Each
+connector normalizes a third-party API into the small contract surface in
+`sdk/core`, so a host service can consume any of them the same way.
 
 **Tech Stack**: Go 1.24 (stdlib-only core; per-connector client deps)
 **Module**: `github.com/qf-studio/studio-sdk`

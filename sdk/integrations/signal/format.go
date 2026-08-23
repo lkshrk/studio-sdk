@@ -6,12 +6,7 @@ import (
 	"unicode"
 )
 
-// Signal has no markdown renderer. With text_mode "styled" it understands
-// *italic*, **bold**, `monospace`, ~strikethrough~ and ||spoiler|| markers;
-// everything else in the Telegram-flavoured markdown that agent output and
-// model answers carry would reach the group as literal characters. styledText
-// translates into that syntax, plainText strips it for contexts such as poll
-// questions, which carry no styles at all.
+// Signal styled mode knows only *italic*, **bold**, `mono`, ~strike~, ||spoiler||; other markdown must be translated or stripped.
 
 var (
 	mdHeader     = regexp.MustCompile(`^#{1,6}\s+`)
@@ -28,20 +23,15 @@ var (
 
 var styleEscaper = strings.NewReplacer("*", `\*`, "`", "\\`", "~", `\~`, "|", `\|`)
 
-// escapeStyleChars backslash-escapes the characters Signal's styled-text parser
-// treats as markers, so content renders verbatim instead of toggling styles.
 func escapeStyleChars(s string) string { return styleEscaper.Replace(s) }
 
-// Placeholders stand in for markers this pass has already claimed, so the
-// blanket escape below cannot escape them along with the unpaired ones.
+// Placeholders shield already-paired markers from the blanket escape.
 const (
 	phStrike = "\x00"
 	phBold   = "\x01"
 	phItalic = "\x02"
 )
 
-// isWordRune reports whether r would make a marker word-internal rather than
-// a flanking emphasis marker.
 func isWordRune(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
@@ -57,11 +47,8 @@ func emphasisCanOpen(runes []rune, i int) bool {
 	return unicode.IsSpace(prev) || strings.ContainsRune("([{<\"'", prev)
 }
 
-// replaceEmphasis rewrites single-marker emphasis spans, wrapping their content
-// in prefix and suffix. A marker only pairs when it flanks the span the way
-// CommonMark requires, so word-internal markers (2*3, build/*.go, snake_case)
-// stay literal for the caller to escape or keep.
-func replaceEmphasis(s string, marker rune, prefix, suffix string) string {
+// Emphasis pairs only at word boundaries; word-internal markers stay literal.
+func replaceEmphasis(s string, marker rune, wrap string) string {
 	if !strings.ContainsRune(s, marker) {
 		return s
 	}
@@ -88,17 +75,15 @@ func replaceEmphasis(s string, marker rune, prefix, suffix string) string {
 			i++
 			continue
 		}
-		b.WriteString(prefix)
+		b.WriteString(wrap)
 		b.WriteString(string(runes[i+1 : end]))
-		b.WriteString(suffix)
+		b.WriteString(wrap)
 		i = end + 1
 	}
 	return b.String()
 }
 
-// styledInline converts one line of markdown into Signal styled syntax. Inline
-// code spans keep their backticks — Signal renders them monospace — but their
-// content is escaped.
+// styledInline converts one markdown line to Signal styled syntax; inline code keeps its backticks.
 func styledInline(line string) string {
 	parts := mdInlineCode.Split(line, -1)
 	codes := mdInlineCode.FindAllStringSubmatch(line, -1)
@@ -109,9 +94,9 @@ func styledInline(line string) string {
 		part = mdStrike.ReplaceAllString(part, phStrike+"$1"+phStrike)
 		part = mdBoldUnder.ReplaceAllString(part, phBold+"$1"+phBold+phBold)
 		part = mdBoldStars.ReplaceAllString(part, phBold+"$1"+phBold+phBold)
-		part = replaceEmphasis(part, '*', phItalic, phItalic)
-		// Anything still carrying a style character is unpaired; the parser
-		// would silently swallow it, so escape rather than lose it.
+		part = replaceEmphasis(part, '*', phItalic)
+		part = replaceEmphasis(part, '_', phItalic)
+		// Remaining style characters are unpaired; escape them so the parser cannot swallow them.
 		part = escapeStyleChars(part)
 		part = strings.ReplaceAll(part, phBold+phBold, "**")
 		part = strings.ReplaceAll(part, phBold, "**")
@@ -125,20 +110,13 @@ func styledInline(line string) string {
 	return b.String()
 }
 
-// fenceBlock wraps collected fence lines as a monospace block, reporting false
-// when the block holds no content and would render as bare backticks.
+// Reports false for a whitespace-only block, which would render as bare backticks.
 func fenceBlock(fence []string) (string, bool) {
 	joined := strings.Join(fence, "\n")
-	if strings.TrimSpace(joined) == "" {
-		return "", false
-	}
-	return "`" + joined + "`", true
+	return joined, strings.TrimSpace(joined) != ""
 }
 
-// styledText renders markdown content in Signal's styled-text syntax: bold,
-// italic and monospace survive as real styles, headers become bold lines,
-// fenced code becomes a monospace block, links render as "label (url)" (Signal
-// linkifies the raw URL), bullets become •, rules and quote markers go away.
+// styledText renders markdown as Signal styled text: real styles, bold headers, "label (url)" links, • bullets.
 func styledText(s string) string {
 	if s == "" {
 		return s
@@ -150,7 +128,7 @@ func styledText(s string) string {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			if inFence {
 				if block, ok := fenceBlock(fence); ok {
-					out = append(out, block)
+					out = append(out, "`"+block+"`")
 				}
 				fence = nil
 			}
@@ -174,27 +152,32 @@ func styledText(s string) string {
 	}
 	if inFence {
 		if block, ok := fenceBlock(fence); ok {
-			out = append(out, block)
+			out = append(out, "`"+block+"`")
 		}
 	}
 	return strings.Join(out, "\n")
 }
 
-// plainText renders markdown-formatted content as readable prose, for the
-// contexts Signal gives no styles at all.
 func plainText(s string) string {
 	if s == "" {
 		return s
 	}
 	var out []string
+	var fence []string
 	inFence := false
 	for _, line := range strings.Split(s, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			if inFence {
+				if block, ok := fenceBlock(fence); ok {
+					out = append(out, block)
+				}
+				fence = nil
+			}
 			inFence = !inFence
 			continue
 		}
 		if inFence {
-			out = append(out, line)
+			fence = append(fence, line)
 			continue
 		}
 		if mdRule.MatchString(line) && !mdBullet.MatchString(line) {
@@ -207,10 +190,15 @@ func plainText(s string) string {
 		line = mdLink.ReplaceAllString(line, "$1 ($2)")
 		line = mdBoldStars.ReplaceAllString(line, "$1")
 		line = mdBoldUnder.ReplaceAllString(line, "$1")
-		line = replaceEmphasis(line, '*', "", "")
-		line = replaceEmphasis(line, '_', "", "")
+		line = replaceEmphasis(line, '*', "")
+		line = replaceEmphasis(line, '_', "")
 		line = mdInlineCode.ReplaceAllString(line, "$1")
 		out = append(out, line)
+	}
+	if inFence {
+		if block, ok := fenceBlock(fence); ok {
+			out = append(out, block)
+		}
 	}
 	return strings.Join(out, "\n")
 }

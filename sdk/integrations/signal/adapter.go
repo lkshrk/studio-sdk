@@ -3,7 +3,7 @@
 //
 // Group membership is the authorization boundary: anyone in an allowlisted
 // group can message pilot and vote in its approval polls, so an empty Groups
-// list admits nothing.
+// list admits nothing. Approvers narrows that further for votes alone.
 //
 // Usage:
 //
@@ -40,6 +40,10 @@ type Config struct {
 	// encoding is accepted — "group.<base64>" from GET /v1/groups or the raw
 	// form carried in received envelopes. Empty admits nothing.
 	Groups []string
+	// Approvers is the allowlist of Signal UUIDs whose poll votes decide an
+	// approval. Empty leaves group membership as the boundary, so any member of
+	// an allowlisted group can decide.
+	Approvers []string
 	// SelfUUID is the account's own Signal UUID, used to ignore the adapter's
 	// own traffic so a message it sent cannot round-trip into its command path.
 	// Optional; without it self-filtering is skipped.
@@ -94,6 +98,7 @@ func (a *Adapter) NewChatBridge(deps core.ChatDeps) core.ChatBridge {
 		receiver:         receiver,
 		deps:             deps,
 		allow:            NewGroupAllowlist(a.cfg.Groups...),
+		approvers:        a.cfg.Approvers,
 		selfUUID:         a.cfg.SelfUUID,
 		logger:           a.logger,
 		polls:            make(map[int64]pollMeta),

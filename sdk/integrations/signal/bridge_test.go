@@ -56,11 +56,17 @@ type apiCall struct {
 
 func newTestBridge(t *testing.T, srvURL string) (*bridge, *recordingHandler) {
 	t.Helper()
+	return newTestBridgeWithApprovers(t, srvURL)
+}
+
+func newTestBridgeWithApprovers(t *testing.T, srvURL string, approvers ...string) (*bridge, *recordingHandler) {
+	t.Helper()
 	h := &recordingHandler{}
 	a := New(Config{
-		BaseURL: srvURL,
-		Account: "+490000000001",
-		Groups:  []string{fixtureGroupID},
+		BaseURL:   srvURL,
+		Account:   "+490000000001",
+		Groups:    []string{fixtureGroupID},
+		Approvers: approvers,
 	}, nil)
 	b := a.NewChatBridge(core.ChatDeps{Handler: h}).(*bridge)
 	if b.initErr != nil {
@@ -224,6 +230,71 @@ func TestStaleVoteRevisionIsIgnored(t *testing.T) {
 
 	if got := len(h.all()); got != 1 {
 		t.Errorf("got %d events, want 1 (same-revision redelivery ignored)", got)
+	}
+}
+
+// openApprovalPoll posts a two-option poll so a fixture vote has a poll to hit.
+func openApprovalPoll(t *testing.T, b *bridge) {
+	t.Helper()
+	if _, err := b.Send(context.Background(), core.OutboundMessage{
+		ChannelID: fixtureGroupID,
+		Text:      "Approve?",
+		Buttons:   []core.Button{{Label: "Approve", Data: "a"}, {Label: "Reject", Data: "r"}},
+	}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+}
+
+func TestNonApproverVoteIsRefused(t *testing.T) {
+	srv, calls := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, h := newTestBridgeWithApprovers(t, srv.URL, "00000000-0000-4000-8000-00000000ffff")
+	openApprovalPoll(t, b)
+
+	b.processFrame(context.Background(), loadEnvelope(t, "poll_vote.json"))
+
+	if got := len(h.all()); got != 0 {
+		t.Errorf("got %d events, want 0 (voter is not an approver)", got)
+	}
+	last := (*calls)[len(*calls)-1]
+	if last.path != "/v2/send" {
+		t.Fatalf("last call = %q, want a refusal message", last.path)
+	}
+	if last.body["message"] != refusedVoteText {
+		t.Errorf("message = %v, want %q", last.body["message"], refusedVoteText)
+	}
+	if _, closed := b.polls[1786854621623]; !closed {
+		t.Error("poll was forgotten; it must stay open for an approver")
+	}
+}
+
+func TestApproverVoteEmitsCallback(t *testing.T) {
+	srv, _ := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, h := newTestBridgeWithApprovers(t, srv.URL, fixtureVoterID)
+	openApprovalPoll(t, b)
+
+	b.processFrame(context.Background(), loadEnvelope(t, "poll_vote.json"))
+
+	events := h.all()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1 callback", len(events))
+	}
+	if events[0].Action != "callback" || events[0].Sender.UserID != fixtureVoterID {
+		t.Errorf("event = %+v", events[0])
+	}
+}
+
+func TestEmptyApproversAdmitsAnyGroupMember(t *testing.T) {
+	srv, calls := apiServer(t, `{"timestamp":"1786854621623"}`)
+	b, h := newTestBridgeWithApprovers(t, srv.URL)
+	openApprovalPoll(t, b)
+
+	b.processFrame(context.Background(), loadEnvelope(t, "poll_vote.json"))
+
+	if got := len(h.all()); got != 1 {
+		t.Fatalf("got %d events, want 1 (group membership is the boundary)", got)
+	}
+	if len(*calls) != 1 {
+		t.Errorf("calls = %+v, want only the poll create (no refusal)", *calls)
 	}
 }
 

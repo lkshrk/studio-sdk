@@ -15,6 +15,9 @@ import (
 // is rejected outright, so the text is trimmed rather than risking a failed send.
 const pollQuestionMax = 140
 
+// refusedVoteText answers a vote from outside the approver allowlist.
+const refusedVoteText = "Vote ignored — not an approver."
+
 // bridge implements core.ChatBridge for Signal over signal-cli-rest-api:
 // a websocket receive stream inbound, HTTP endpoints outbound.
 //
@@ -22,12 +25,13 @@ const pollQuestionMax = 140
 // a native poll (the vote binds to the message and the voter is identifiable),
 // and Edit posts a fresh message instead of mutating one.
 type bridge struct {
-	sender   *Sender
-	receiver *Receiver
-	deps     core.ChatDeps
-	allow    *GroupAllowlist
-	selfUUID string
-	logger   *slog.Logger
+	sender    *Sender
+	receiver  *Receiver
+	deps      core.ChatDeps
+	allow     *GroupAllowlist
+	approvers []string
+	selfUUID  string
+	logger    *slog.Logger
 
 	initErr error
 
@@ -182,6 +186,17 @@ func (b *bridge) handleVote(ctx context.Context, vote Vote) {
 		return
 	}
 
+	if !b.mayApprove(vote.VoterID) {
+		b.logger.Warn("signal: vote from non-approver ignored",
+			slog.Int64("poll", vote.PollTimestamp),
+			slog.String("voter", vote.VoterID))
+		// The poll stays open so an approver can still decide it.
+		if _, err := b.sender.SendText(ctx, meta.recipient, refusedVoteText); err != nil {
+			b.logger.Warn("signal: reporting refused vote failed", slog.Any("error", err))
+		}
+		return
+	}
+
 	ev := core.MessageEvent{
 		Action:     "callback",
 		CallbackID: formatCallbackID(meta.recipient, vote.PollTimestamp),
@@ -194,6 +209,20 @@ func (b *bridge) handleVote(ctx context.Context, vote Vote) {
 	if err := b.deps.Handler.HandleMessage(ctx, ev); err != nil {
 		b.logger.Warn("signal: callback handler error", slog.Any("error", err))
 	}
+}
+
+// mayApprove reports whether a voter is allowed to decide a poll. An empty
+// approver list leaves group membership as the boundary.
+func (b *bridge) mayApprove(voter string) bool {
+	if len(b.approvers) == 0 {
+		return true
+	}
+	for _, id := range b.approvers {
+		if id == voter {
+			return true
+		}
+	}
+	return false
 }
 
 // formatCallbackID encodes everything Ack needs to close the poll, so

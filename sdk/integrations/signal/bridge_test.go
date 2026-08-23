@@ -101,7 +101,7 @@ func TestProcessFrameEmitsSanitizedMessage(t *testing.T) {
 	b, h := newTestBridge(t, "http://signal.invalid")
 
 	e := loadEnvelope(t, "group_data_message.json")
-	smuggled := "review​ this⁠ change"
+	smuggled := "review\u200b this\u2060 change"
 	e.DataMessage.Message = &smuggled
 
 	b.processFrame(context.Background(), e)
@@ -144,6 +144,31 @@ func TestProcessFrameNormalizesCommands(t *testing.T) {
 	}
 	if len(ev.Args) != 2 || ev.Args[0] != "TASK-7" {
 		t.Errorf("args = %v", ev.Args)
+	}
+}
+
+func TestProcessFrameSanitizesCommandArgs(t *testing.T) {
+	b, h := newTestBridge(t, "http://signal.invalid")
+
+	e := loadEnvelope(t, "group_data_message.json")
+	cmd := "/run TASK\u200b-7 no\u2060w"
+	e.DataMessage.Message = &cmd
+
+	b.processFrame(context.Background(), e)
+
+	events := h.all()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	ev := events[0]
+	if ev.Command != "/run" {
+		t.Errorf("command = %q, want /run", ev.Command)
+	}
+	if len(ev.Args) != 2 || ev.Args[0] != "TASK-7" || ev.Args[1] != "now" {
+		t.Errorf("args = %q, want invisible runes stripped", ev.Args)
+	}
+	if ev.Text != "" {
+		t.Errorf("text = %q, want empty for commands", ev.Text)
 	}
 }
 

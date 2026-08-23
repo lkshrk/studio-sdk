@@ -153,7 +153,8 @@ func (b *bridge) processFrame(ctx context.Context, e Envelope) {
 	if b.selfUUID != "" && e.SourceUUID == b.selfUUID {
 		return
 	}
-	text := e.Text()
+	// Sanitized before the split so smuggled runes cannot ride into Command/Args.
+	text := sanitizeMessageText(e.Text(), b.logger)
 	if text == "" {
 		return
 	}
@@ -178,7 +179,7 @@ func (b *bridge) processFrame(ctx context.Context, e Envelope) {
 			Action:    "message",
 			MessageID: messageID,
 			ChannelID: channelID,
-			Text:      sanitizeMessageText(text, b.logger),
+			Text:      text,
 			Sender:    sender,
 		}
 	}

@@ -125,6 +125,16 @@ func styledInline(line string) string {
 	return b.String()
 }
 
+// fenceBlock wraps collected fence lines as a monospace block, reporting false
+// when the block holds no content and would render as bare backticks.
+func fenceBlock(fence []string) (string, bool) {
+	joined := strings.Join(fence, "\n")
+	if strings.TrimSpace(joined) == "" {
+		return "", false
+	}
+	return "`" + joined + "`", true
+}
+
 // styledText renders markdown content in Signal's styled-text syntax: bold,
 // italic and monospace survive as real styles, headers become bold lines,
 // fenced code becomes a monospace block, links render as "label (url)" (Signal
@@ -139,8 +149,8 @@ func styledText(s string) string {
 	for _, line := range strings.Split(s, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			if inFence {
-				if len(fence) > 0 {
-					out = append(out, "`"+strings.Join(fence, "\n")+"`")
+				if block, ok := fenceBlock(fence); ok {
+					out = append(out, block)
 				}
 				fence = nil
 			}
@@ -162,8 +172,10 @@ func styledText(s string) string {
 		line = mdBullet.ReplaceAllString(line, "$1• ")
 		out = append(out, styledInline(line))
 	}
-	if inFence && len(fence) > 0 {
-		out = append(out, "`"+strings.Join(fence, "\n")+"`")
+	if inFence {
+		if block, ok := fenceBlock(fence); ok {
+			out = append(out, block)
+		}
 	}
 	return strings.Join(out, "\n")
 }

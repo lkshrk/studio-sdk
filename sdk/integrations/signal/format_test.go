@@ -54,6 +54,21 @@ func TestStyledText(t *testing.T) {
 			want: "before\nafter",
 		},
 		{
+			name: "blank-line fence renders nothing",
+			in:   "before\n```\n\n```\nafter",
+			want: "before\nafter",
+		},
+		{
+			name: "whitespace-only fence renders nothing",
+			in:   "before\n```\n   \n```\nafter",
+			want: "before\nafter",
+		},
+		{
+			name: "unterminated blank fence renders nothing",
+			in:   "before\n```\n\n",
+			want: "before",
+		},
+		{
 			name: "non-empty fence still wraps",
 			in:   "before\n```\ncode\n```\nafter",
 			want: "before\n`code`\nafter",

@@ -25,7 +25,8 @@ sdk/
     text/          Untrusted-text sanitization (prompt-injection defense)
   integrations/    One package per connector
     asana/  azuredevops/  discord/  github/  gitlab/
-    jira/   linear/       plane/    slack/   telegram/
+    jira/   linear/       plane/    signal/  slack/
+    telegram/
   doc.go           Package-level docs
 ```
 
@@ -95,5 +96,6 @@ compile and pass tests.
 - Nothing in the SDK depends on a consuming application.
 
 The only third-party runtime dependency in the SDK today is
-`github.com/gorilla/websocket` (used by `slack` Socket Mode and `discord`
-Gateway). Every other connector is stdlib-only at runtime.
+`github.com/gorilla/websocket` (used by `slack` Socket Mode, `discord`
+Gateway, and the `signal` signal-cli-rest-api receive stream). Every other
+connector is stdlib-only at runtime.

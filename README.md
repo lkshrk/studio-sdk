@@ -4,10 +4,11 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/qf-studio/studio-sdk.svg)](https://pkg.go.dev/github.com/qf-studio/studio-sdk)
 
 Reusable Go connectors for issue trackers (GitHub, GitLab, Azure DevOps, Linear,
-Jira, Asana, Plane) and chat platforms (Slack, Telegram, Discord), behind one
-small contract surface. Wire any of them into a Go service the same way.
+Jira, Asana, Plane) and chat platforms (Slack, Telegram, Discord, Signal),
+behind one small contract surface. Wire any of them into a Go service the same
+way.
 
-> **Status:** `v0.x` — all 10 connectors shipped. The public API is unstable;
+> **Status:** `v0.x` — all 11 connectors shipped. The public API is unstable;
 > breaking changes are allowed until `v1.0.0` and are noted in release notes.
 
 ## Design principles
@@ -47,30 +48,32 @@ sdk/
     text/          # Untrusted-text sanitization (anti prompt-injection)
   integrations/    # One package per connector
     asana/  azuredevops/  discord/  github/  gitlab/
-    jira/   linear/       plane/    slack/   telegram/
+    jira/   linear/       plane/    signal/  slack/
+    telegram/
 ```
 
 ## Connectors
 
-| Connector     | Type          | Transport            | Status |
-| ------------- | ------------- | -------------------- | ------ |
-| `github`      | issue tracker | poll + webhook       | ✅     |
-| `gitlab`      | issue tracker | poll + webhook       | ✅     |
-| `azuredevops` | issue tracker | poll + webhook       | ✅     |
-| `linear`      | issue tracker | poll + webhook       | ✅     |
-| `jira`        | issue tracker | poll + webhook       | ✅     |
-| `asana`       | issue tracker | poll + webhook       | ✅     |
-| `plane`       | issue tracker | poll                 | ✅     |
-| `telegram`    | chat          | long-poll            | ✅     |
-| `slack`       | chat          | Socket Mode (WS)     | ✅     |
-| `discord`     | chat          | Gateway (WS)         | ✅     |
+| Connector     | Type          | Transport                                   | Status |
+| ------------- | ------------- | ------------------------------------------- | ------ |
+| `github`      | issue tracker | poll + webhook                              | ✅     |
+| `gitlab`      | issue tracker | poll + webhook                              | ✅     |
+| `azuredevops` | issue tracker | poll + webhook                              | ✅     |
+| `linear`      | issue tracker | poll + webhook                              | ✅     |
+| `jira`        | issue tracker | poll + webhook                              | ✅     |
+| `asana`       | issue tracker | poll + webhook                              | ✅     |
+| `plane`       | issue tracker | poll                                        | ✅     |
+| `telegram`    | chat          | long-poll                                   | ✅     |
+| `slack`       | chat          | Socket Mode (WS)                            | ✅     |
+| `discord`     | chat          | Gateway (WS)                                | ✅     |
+| `signal`      | chat          | signal-cli-rest-api (WS receive, HTTP send) | ✅     |
 
 ## Runtime dependencies
 
 The core and utility packages are stdlib-only. The only third-party runtime
 dependency in the SDK is `github.com/gorilla/websocket`, pulled in by `slack`
-(Socket Mode) and `discord` (Gateway). Every other connector is stdlib-only at
-runtime.
+(Socket Mode), `discord` (Gateway), and `signal` (the signal-cli-rest-api
+receive stream). Every other connector is stdlib-only at runtime.
 
 ## Issue-tracker usage
 
